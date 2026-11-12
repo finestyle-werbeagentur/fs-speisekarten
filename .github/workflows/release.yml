@@ -1,0 +1,33 @@
+# Neue Version veröffentlichen:
+# 1. Version in fs-speisekarten.php (Kopf + FS_SK_VERSION) erhöhen
+# 2. Tag setzen und pushen:  git tag v1.5.1 && git push --tags
+# → diese Aktion baut fs-speisekarten.zip und hängt sie an ein neues Release.
+#   Alle Seiten mit dem Plugin zeigen danach „Update verfügbar“.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version prüfen
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          FILE=$(grep -oP "define\( 'FS_SK_VERSION', '\K[^']+" fs-speisekarten.php)
+          HEAD=$(grep -oP "^ \* Version:\s+\K\S+" fs-speisekarten.php)
+          echo "Tag $TAG · Konstante $FILE · Kopf $HEAD"
+          [ "$TAG" = "$FILE" ] && [ "$TAG" = "$HEAD" ] || { echo "::error::Versionsnummern passen nicht zum Tag"; exit 1; }
+      - name: ZIP bauen
+        run: |
+          mkdir -p build/fs-speisekarten
+          rsync -a --exclude '.git*' --exclude '.github' --exclude 'build' ./ build/fs-speisekarten/
+          cd build && zip -qr ../fs-speisekarten.zip fs-speisekarten
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" fs-speisekarten.zip --title "Version ${GITHUB_REF_NAME#v}" --generate-notes
