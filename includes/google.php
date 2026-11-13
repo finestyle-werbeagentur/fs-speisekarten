@@ -211,3 +211,68 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 } );
+
+/* -------------------------------------------------------------------------
+ * Automatisch an Google: Nach dem Speichern gibt die Website dem Finestyle-
+ * Kundenpanel Bescheid. Das Panel holt die Karte über die Adresse oben ab und
+ * schickt sie an das zugeordnete Google-Profil. Die Zugangsdaten zu Google
+ * liegen nur im Panel, nie auf der Website.
+ * ---------------------------------------------------------------------- */
+if ( ! defined( 'FS_SK_PANEL_PING' ) ) {
+	define( 'FS_SK_PANEL_PING', 'https://panel.finestyle.eu/google.php?a=ping' );
+}
+
+/** Übertragung in ein paar Sekunden im Hintergrund anstoßen. */
+function fs_sk_google_queue( $delay = 5 ) {
+	if ( ! FS_SK_PANEL_PING ) {
+		return;
+	}
+	if ( ! wp_next_scheduled( 'fs_sk_google_ping' ) ) {
+		wp_schedule_single_event( time() + $delay, 'fs_sk_google_ping' );
+	}
+	update_option( 'fs_sk_google_status', array( 'st' => 'busy', 'msg' => 'Wird an Google übertragen …', 'at' => time() ), false );
+}
+
+add_action( 'fs_sk_google_ping', function () {
+	$r = wp_remote_post( FS_SK_PANEL_PING, array(
+		'timeout' => 60,
+		'body'    => array( 'site' => home_url( '/' ) ),
+	) );
+	if ( is_wp_error( $r ) ) {
+		$st = array( 'st' => 'err', 'msg' => 'Das Kundenpanel ist gerade nicht erreichbar.' );
+	} else {
+		$j  = json_decode( wp_remote_retrieve_body( $r ), true );
+		$st = is_array( $j ) && isset( $j['st'] ) ? array( 'st' => sanitize_key( $j['st'] ), 'msg' => sanitize_text_field( (string) ( $j['msg'] ?? '' ) ) )
+			: array( 'st' => 'err', 'msg' => 'Unerwartete Antwort vom Kundenpanel.' );
+		if ( 'busy' === $st['st'] ) { // läuft gerade schon → gleich noch einmal
+			wp_schedule_single_event( time() + 30, 'fs_sk_google_ping' );
+		}
+	}
+	$st['at'] = time();
+	update_option( 'fs_sk_google_status', $st, false );
+} );
+
+// Nach dem Speichern einer veröffentlichten Karte
+add_action( 'save_post_' . FS_SK_CPT, function ( $post_id, $post ) {
+	if ( wp_is_post_revision( $post_id ) || ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) ) {
+		return;
+	}
+	if ( 'publish' === $post->post_status && isset( $_POST['fs_sk_nonce'] ) ) { // phpcs:ignore -- Nonce prüft der Speicher-Handler
+		fs_sk_google_queue();
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+	}
+}, 30, 2 );
+
+/** Stand der letzten Übertragung (für die Seitenleiste) */
+function fs_sk_google_status_html() {
+	$st = get_option( 'fs_sk_google_status' );
+	if ( ! is_array( $st ) || empty( $st['st'] ) ) {
+		return '';
+	}
+	$icon = array( 'ok' => '✓', 'held' => '!', 'err' => '✕', 'wait' => '…', 'busy' => '…' );
+	$when = ! empty( $st['at'] ) ? ' (' . wp_date( 'd.m.Y H:i', (int) $st['at'] ) . ')' : '';
+	return '<p class="fs-small fs-google fs-google--' . esc_attr( $st['st'] ) . '"><strong>' . esc_html( $icon[ $st['st'] ] ?? '' ) . ' Google:</strong> '
+		. esc_html( (string) ( $st['msg'] ?? '' ) ) . esc_html( $when ) . '</p>';
+}

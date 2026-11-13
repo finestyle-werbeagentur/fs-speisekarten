@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Finestyle Speisekarten
  * Description:       Speisekarte als PDF hochladen – wird automatisch als sauberes HTML (gut für Google) auf der Seite ausgegeben und die PDF bleibt per Button im Browser abrufbar.
- * Version:           1.8.0
+ * Version:           1.9.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Finestyle Werbeagentur
@@ -14,7 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FS_SK_VERSION', '1.8.0' );
+define( 'FS_SK_VERSION', '1.9.0' );
+// Version des Auslesens: nur erhöhen, wenn sich parser.js ändert – dann werden alle Karten neu ausgelesen
+define( 'FS_SK_PARSER', '1.7.0' );
 define( 'FS_SK_URL', plugin_dir_url( __FILE__ ) );
 define( 'FS_SK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FS_SK_CPT', 'fs_speisekarte' );
@@ -75,7 +77,7 @@ add_action( 'post_edit_form_tag', function ( $post ) {
  * ---------------------------------------------------------------------- */
 function fs_sk_save_auto( $post_id, $auto ) {
 	update_post_meta( $post_id, '_fs_sk_auto', wp_slash( wp_json_encode( fs_sk_sanitize_data( $auto ), JSON_UNESCAPED_UNICODE ) ) );
-	update_post_meta( $post_id, '_fs_sk_parser', FS_SK_VERSION );
+	update_post_meta( $post_id, '_fs_sk_parser', FS_SK_PARSER );
 }
 
 /** Reines Auslese-Ergebnis vom letzten Mal (Vergleichsbasis für Handkorrekturen). */
@@ -399,7 +401,8 @@ function fs_sk_render_side( $post ) {
 
 		<p class="fs-side__l">Google-Profil</p>
 		<label class="fs-check"><input type="checkbox" name="fs_sk_google" value="1" <?php checked( 'no' !== get_post_meta( $post->ID, '_fs_sk_google', true ) ); ?>> Karte an Google senden</label>
-		<p class="fs-small">Die Karte erscheint im Google-Unternehmensprofil, sobald das Kundenpanel sie überträgt.</p>
+		<p class="fs-small">Nach dem Speichern wird die Karte automatisch an das Google-Profil des Restaurants gesendet (über das Finestyle-Kundenpanel).</p>
+		<?php echo fs_sk_google_status_html(); // phpcs:ignore -- bereits maskiert ?>
 
 		<p class="fs-side__save">Änderungen werden erst gespeichert, wenn du oben auf <strong>„Aktualisieren“</strong> klickst.</p>
 

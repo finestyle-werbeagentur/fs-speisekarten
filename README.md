@@ -17,3 +17,7 @@ Jede Website gibt ihre veröffentlichten Karten im Google-Format aus:
 - Eine Karte: `https://kunde.de/wp-json/fs-speisekarten/v1/google/{id}`
 
 Die Antwort enthält `foodMenus` (geht unverändert per `PATCH …/locations/{id}/foodMenus` an Google), dazu `hash` (ändert sich nur, wenn sich die Karte ändert) und `cards` (Übersicht). Karten ohne Häkchen „Karte an Google senden“ werden ausgelassen, Gerichte ohne Preis auch (Google verlangt einen Preis).
+
+**Auslesen geändert?** Nur wenn sich `assets/parser.js` ändert, auch `FS_SK_PARSER` in `fs-speisekarten.php` hochsetzen. Dann werden nach dem Update alle Karten zum Neu-Auslesen vorgemerkt – sonst nicht.
+
+**Automatisch an Google:** Nach dem Speichern einer veröffentlichten Karte meldet sich die Website beim Kundenpanel (`FS_SK_PANEL_PING`, Standard `https://panel.finestyle.eu/google.php?a=ping`). Das Panel holt die Karte über `/wp-json/fs-speisekarten/v1/google` und sendet sie an das zugeordnete Google-Profil. Abschalten pro Website: `define( 'FS_SK_PANEL_PING', '' );` in der wp-config.php.

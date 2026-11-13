@@ -17,7 +17,7 @@ function fs_sk_outdated_cards() {
 		'fields'         => 'ids',
 	) );
 	return array_values( array_filter( $ids, function ( $id ) {
-		return fs_sk_pdf_url( $id, false ) && get_post_meta( $id, '_fs_sk_parser', true ) !== FS_SK_VERSION;
+		return fs_sk_pdf_url( $id, false ) && version_compare( (string) get_post_meta( $id, '_fs_sk_parser', true ), FS_SK_PARSER, '<' );
 	} ) );
 }
 
@@ -70,7 +70,7 @@ function fs_sk_render_bulk_page() {
 			'id'       => $id,
 			'title'    => get_the_title( $id ),
 			'pdfUrl'   => $url,
-			'outdated' => get_post_meta( $id, '_fs_sk_parser', true ) !== FS_SK_VERSION,
+			'outdated' => version_compare( (string) get_post_meta( $id, '_fs_sk_parser', true ), FS_SK_PARSER, '<' ),
 			'edit'     => get_edit_post_link( $id, 'raw' ),
 		);
 	}
@@ -84,7 +84,7 @@ function fs_sk_render_bulk_page() {
 	?>
 	<div class="wrap fs-sk-admin fs-bulk">
 		<h1>Alle Speisekarten neu auslesen</h1>
-		<p class="fs-bulk__intro">Hier liest du alle PDFs mit der aktuellen Version (<?php echo esc_html( FS_SK_VERSION ); ?>) neu aus. <strong>Was du von Hand korrigiert hast, bleibt erhalten.</strong> Lass diese Seite offen, bis alle Karten fertig sind.</p>
+		<p class="fs-bulk__intro">Hier liest du alle PDFs mit der aktuellen Version (<?php echo esc_html( FS_SK_PARSER ); ?>) neu aus. <strong>Was du von Hand korrigiert hast, bleibt erhalten.</strong> Lass diese Seite offen, bis alle Karten fertig sind.</p>
 		<script type="application/json" id="fs-bulk-init"><?php echo wp_json_encode( $init, JSON_HEX_TAG | JSON_HEX_AMP ); ?></script>
 		<p><button type="button" class="button button-primary button-hero" id="fs-bulk-run">Alle neu auslesen</button>
 			<label style="margin-left:12px"><input type="checkbox" id="fs-bulk-all"> auch Karten, die schon aktuell sind</label></p>
@@ -136,6 +136,9 @@ add_action( 'wp_ajax_fs_sk_bulk_save', function () {
 	update_post_meta( $id, '_fs_sk_data', wp_slash( wp_json_encode( fs_sk_sanitize_data( $data ), JSON_UNESCAPED_UNICODE ) ) );
 	fs_sk_save_auto( $id, $auto );
 	fs_sk_purge_caches();
+	if ( 'publish' === get_post_status( $id ) && function_exists( 'fs_sk_google_queue' ) ) {
+		fs_sk_google_queue( 20 );
+	}
 	if ( ! fs_sk_outdated_cards() ) {
 		delete_option( 'fs_sk_reread_pending' );
 	}

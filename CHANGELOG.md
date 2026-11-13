@@ -1,5 +1,9 @@
 # Änderungen
 
+## 1.9.0
+- Speisekarte geht automatisch an Google: Nach dem Speichern gibt die Website dem Finestyle-Kundenpanel Bescheid, das die Karte an das zugeordnete Google-Profil schickt
+- In der Seitenleiste jeder Karte steht, ob und wann die Karte bei Google angekommen ist
+
 ## 1.8.0
 - Vorbereitung für Google: Jede Website gibt ihre Karten im Google-Format aus (`/wp-json/fs-speisekarten/v1/google`). Das Kundenpanel holt sie dort ab und überträgt sie ins Google-Unternehmensprofil
 - Deutsch und Englisch, Preise, mehrere Größen, vegetarisch/vegan und Schärfe werden mitgegeben

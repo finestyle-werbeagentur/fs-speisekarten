@@ -161,7 +161,8 @@ add_action( 'admin_init', function () {
 			fs_sk_protect_dir( $u['dir'] );
 		}
 	}
-	if ( $stored ) {
-		update_option( 'fs_sk_reread_pending', FS_SK_VERSION, false ); // wird in Schritt 3 genutzt
+	// Nur neu auslesen lassen, wenn sich das Auslesen selbst geändert hat
+	if ( $stored && function_exists( 'fs_sk_outdated_cards' ) && fs_sk_outdated_cards() ) {
+		update_option( 'fs_sk_reread_pending', FS_SK_PARSER, false );
 	}
 } );
