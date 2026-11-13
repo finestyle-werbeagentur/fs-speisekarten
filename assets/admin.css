@@ -130,3 +130,10 @@ textarea.fs-in { resize: vertical; min-height: 32px; overflow: hidden; line-heig
 .fs-bulk__row[data-state="warn"] .fs-bulk__dot { background: #dba617; }
 .fs-bulk__row[data-state="stop"] .fs-bulk__dot { background: #d63638; }
 @keyframes fs-pulse { 50% { opacity: .35; } }
+
+/* Englische Felder */
+.fs-en-row { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: 10px; margin-top: 8px; }
+.fs-f--en .fs-f__l::before { content: "EN · "; color: #0F6E75; font-weight: 700; }
+.fs-f--en .fs-in { background: #f6fafa; }
+.fs-lang2-bar { margin: 0 0 12px; color: #50575e; }
+@media (max-width: 782px) { .fs-en-row { grid-template-columns: 1fr; } }

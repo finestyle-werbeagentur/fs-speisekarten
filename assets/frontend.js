@@ -36,8 +36,40 @@
     var list = box.querySelectorAll('details.fs-sk__section');
     var anyClosed = Array.prototype.some.call(list, function (d) { return !d.open; });
     list.forEach(function (d) { d.open = anyClosed; });
-    t.textContent = anyClosed ? t.getAttribute('data-close') : t.getAttribute('data-open');
+    t.dataset.state = anyClosed ? 'close' : 'open';
+    toggleText(t);
   });
+  function toggleText(t) {
+    var en = t.closest('.fs-sk').classList.contains('fs-sk--en');
+    var key = 'data-' + (t.dataset.state || 'open') + (en ? '-en' : '');
+    t.textContent = t.getAttribute(key) || t.getAttribute('data-' + (t.dataset.state || 'open'));
+  }
+
+  // Sprache umschalten (Flagge)
+  var LS = 'fs_sk_lang';
+  function setLang(box, en) {
+    box.classList.toggle('fs-sk--en', en);
+    var b = box.querySelector('.fs-sk__lang');
+    if (b) b.setAttribute('aria-pressed', en ? 'true' : 'false');
+    var t = box.querySelector('.fs-sk__toggle');
+    if (t) toggleText(t);
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.fs-sk__lang') : null;
+    if (!b) return;
+    var box = b.closest('.fs-sk');
+    var en = !box.classList.contains('fs-sk--en');
+    document.querySelectorAll('.fs-sk').forEach(function (x) { if (x.querySelector('.fs-sk__lang')) setLang(x, en); });
+    try { localStorage.setItem(LS, en ? 'en' : 'de'); } catch (err) {}
+  });
+  function initLang() {
+    var pref = null;
+    try { pref = localStorage.getItem(LS); } catch (err) {}
+    // Gäste mit nicht-deutschem Browser sehen direkt Englisch
+    var en = pref ? pref === 'en' : !/^de\b/i.test(navigator.language || 'de');
+    if (en) document.querySelectorAll('.fs-sk').forEach(function (x) { if (x.querySelector('.fs-sk__lang')) setLang(x, true); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initLang); else initLang();
 
   // Sprungmarke (#fs-sk-…) öffnet den Bereich
   function openHash() {

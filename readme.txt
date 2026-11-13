@@ -1,5 +1,5 @@
 === Finestyle Speisekarten ===
-Version: 1.6.0
+Version: 1.7.0
 
 So geht's:
 1. Plugin hochladen (Plugins > Installieren > Plugin hochladen) und aktivieren.

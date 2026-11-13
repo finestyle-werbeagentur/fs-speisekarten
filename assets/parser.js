@@ -447,6 +447,114 @@ function assignIcons(lines, pages) {
 
 // ---------- 6. Rollen bestimmen und Struktur bauen ----------
 
+
+// ---------- Zweite Sprache (Englisch) erkennen ----------
+const EN_WORDS = new Set(('the and with of on in from our or served side salad bread cheese chicken beef pork veal lamb fish salmon tuna prawns shrimps shrimp king ' +
+  'tomato tomatoes onions onion garlic potatoes potato fries french mushrooms spinach pepper peppers ham egg eggs apple juice milk coffee tea water sparkling still ' +
+  'fresh grilled fried roasted baked homemade house wine wines red white bottled beer draught hot cold drinks cream vanilla chocolate strawberries fruit fruits mixed leaf ' +
+  'lettuce olives olive oil rocket strips breast sliced crunchy honeydew melon buffalo sweetcorn yogurt dressing balsamic button rice noodles soup starters starter main mains dessert desserts ' +
+  'cake pie sugar honey butter bacon sausage meat vegetables vegetable beans carrots corn spicy mild sweet sour crispy creamy topped stuffed fillet steak steaks breaded served all also available alcohol free alcoholic non cloudy passion pineapple blackcurrant spritzer ' +
+  'glass bottle each per person small large kids children menu daily special choice your for to a an is are this these at by baby leaves seasonal teas coffees ' +
+  'non-alcoholic alcohol-free sun-dried full-bodied oven-baked straw-yellow poultry pieces piece slices turkey duck dumplings plate platter wrapped smoked cured herbs with').split(' '));
+const DE_WORDS = new Set(('der die das den dem des und mit auf aus vom von zum zur im ein eine einer dazu oder nach wahl alle auch erhältlich frisch frische frischer hausgemacht hausgemachte ' +
+  'gebraten gebratene gegrillt gegrillte überbacken mit sahne soße sosse käse brot rind rinder schwein hähnchen hähnchenbrust kartoffeln kartoffel salat suppe wein weißwein rotwein saft bier wasser ' +
+  'kuchen eis zwiebeln knoblauch tomaten tomatensauce champignons pilze paprika schinken ei zitrone milch kaffee tee gemüse nudeln reis pommes frites blattsalat rucola ' +
+  'thunfisch lachs garnelen scharf süß sauer knusprig cremig gefüllt filet streifen oliven olivenöl mais honigmelone parmaschinken joghurt rinderstreifen croûtons scheiben geflügel ' +
+  'alkoholfrei naturtrüb schorle johannisbeere ohne kleine große glas flasche je pro person kinder tagesgericht beilagen beilage ' +
+  'basilikum petersilie salbei rosmarin thymian kapern sardellen monate gereifter gehobelter geräucherter hackfleisch rinderhackfleisch strohgelb trocken weich zart würzig spinat sahnesauce sahnesoße rahmsoße weißweinsauce').split(' '));
+function langScore(t) {
+  const words = stripSup(String(t || '')).toLowerCase().replace(/[^a-zäöüßéèàâç'\s-]/g, ' ').split(/\s+/).map((w) => w.replace(/^-+|-+$/g, '')).filter(Boolean);
+  let en = 0, de = 0;
+  for (const w of words) {
+    if (/[äöüß]/.test(w)) de++;
+    if (DE_WORDS.has(w)) de++; else if (EN_WORDS.has(w)) en++;
+    else if (/(brot|suppe|salat|soße|sosse|käse|fleisch|kartoffel|nudeln|saft|bier|wasser|kuchen|wein|creme|schnitzel|brust|streifen|tomaten|sauce|beeren|lich|isch|keit|heit|ungen|chen|ig|igen|iger|ige|gelb)$/.test(w) && w.length > 5) de++;
+  }
+  return { en, de, n: words.length };
+}
+const looksEn = (t) => { const s = langScore(t); return s.en >= 1 && s.en > s.de; };
+const looksDe = (t) => { const s = langScore(t); return s.de >= s.en; };
+
+/** „Pizzabrot | Pizza bread“ → ['Pizzabrot', 'Pizza bread'] – nur wenn rechts klar Englisch und links Deutsch ist. */
+function splitPipe(t, minEn = 2) {
+  const parts = String(t || '').split(/\s+\|\s+/);
+  if (parts.length < 2) return null;
+  let best = null;
+  for (let i = 1; i < parts.length; i++) {
+    const l = parts.slice(0, i).join(' | '), r = parts.slice(i).join(' | ');
+    const ls = langScore(l), rs = langScore(r);
+    // kurzes Paar („Geflügel | poultry“): ein englisches Wort reicht, wenn links klar Deutsch ist
+    const need = ls.n <= 3 && rs.n <= 3 && ls.de >= 1 ? 1 : minEn;
+    if (rs.en >= need && rs.de === 0 && ls.en < Math.max(1, ls.de)) {
+      const sc = (ls.de - ls.en) + (rs.en - rs.de);
+      if (!best || sc > best.sc) best = { l, r, sc };
+    }
+  }
+  return best ? [best.l.replace(/[\s|]+$/, '').trim(), best.r.replace(/[\s|]+$/, '').trim()] : null;
+}
+
+/** Deutsche Beschreibung, direkt gefolgt von Englisch ohne Trennzeichen („… Napoli Sauce Prawns, cherry tomatoes …“). */
+function splitRun(t) {
+  const p = splitPipe(t, 3);
+  if (p) return p;
+  const words = String(t || '').split(' ');
+  if (words.length < 6) return null;
+  let best = null;
+  for (let i = 2; i < words.length - 1; i++) {
+    if (!/^[A-ZÄÖÜ]/.test(words[i])) continue;
+    const l = words.slice(0, i).join(' '), r = words.slice(i).join(' ');
+    const ls = langScore(l), rs = langScore(r);
+    if (rs.en >= 2 && rs.de === 0 && ls.de >= 1 && ls.en < ls.de) {
+      const first = words[i].toLowerCase().replace(/[^a-zäöüß]/g, '');
+      const lastL = words[i - 1].replace(/[^\p{L}]/gu, '');
+      const sc = (ls.de - ls.en) + (rs.en - rs.de) + (EN_WORDS.has(first) ? 1.5 : 0) - (/^\p{Ll}/u.test(lastL) && !/,$/.test(words[i - 1]) ? 1 : 0);
+      if (!best || sc > best.sc) best = { l, r, sc };
+    }
+  }
+  return best ? [best.l.replace(/[\s|,;–-]+$/, '').trim(), best.r.trim()] : null;
+}
+
+/** Zweite Sprache aus der Karte lösen: name2, desc2, title2, note2 */
+function extractSecondLanguage(menu) {
+  let found = 0;
+  for (const s of menu.sections) {
+    const tp = splitPipe(s.title);
+    if (tp) { s.title = tp[0]; s.title2 = tp[1]; found++; }
+    if (s.note) {
+      const np = splitRun(s.note) || (() => { const m = s.note.match(/^(.+?[.!])\s+(.+)$/); return m && looksDe(m[1]) && looksEn(m[2]) ? [m[1], m[2]] : null; })();
+      if (np) { s.note = np[0]; s.note2 = np[1]; found++; }
+    }
+    const items = [];
+    for (const it of s.items) {
+      const prev = items[items.length - 1];
+      if (it.type === 'sub') {
+        const sp = splitPipe(it.name);
+        if (sp) { it.name = sp[0]; it.name2 = sp[1]; found++; items.push(it); continue; }
+        if (looksEn(it.name) && !looksDe(it.name)) {
+          // englische Zeile ohne deutsches Gegenstück daneben → zur Zeile davor
+          if (!prev && !s.title2 && s.title) { s.title2 = it.name; found++; continue; }
+          if (prev && prev.type === 'sub' && !prev.name2 && looksDe(prev.name)) { prev.name2 = it.name; found++; continue; }
+          if (prev && prev.type !== 'sub' && !prev.name2 && !prev.desc2) {
+            if (prev.desc) prev.desc2 = it.name; else prev.name2 = it.name;
+            found++; continue;
+          }
+        }
+        items.push(it);
+        continue;
+      }
+      const np = splitPipe(it.name);
+      if (np) { it.name = np[0]; it.name2 = np[1]; found++; }
+      if (it.desc && !it.desc2) {
+        const dp = splitRun(it.desc);
+        if (dp) { it.desc = dp[0]; it.desc2 = dp[1]; it._d2split = true; found++; }
+      }
+      items.push(it);
+    }
+    s.items = items;
+  }
+  return found;
+}
+
 // ---------- Schreibweise ----------
 const normUnitLabel = (t) => { const l = t.toLowerCase().replace(/\s+/g, ' '); return /^p\.\s?p\.$/.test(l) ? 'pro Person' : l.replace(/(person|kugel|stück|portion)$/, (m) => m.charAt(0).toUpperCase() + m.slice(1)); };
 const KEEP_UP = new Set(['DOC', 'DOCG', 'IGT', 'AOC', 'VDP', 'BBQ', 'XO', 'VS', 'VSOP', 'XXO', 'IPA', 'USA', 'U.S.', 'DJ', 'TV', 'EU', 'UK', 'NY', 'BLT', 'XL', 'XXL', 'KG', 'II', 'III', 'IV', 'VI', 'VII', 'VIII', 'IX', 'XI', 'XII', 'P2', 'DOCa', 'DO', 'IGP', 'AOP', 'DOP', 'QBA', 'GG']);
@@ -1008,14 +1116,29 @@ export function parseMenu(pages) {
   }
   menu.sections = menu.sections.filter((s) => !s._extra);
   menu.sections.forEach((s) => delete s._hasExtra);
+  const nItems2 = menu.sections.reduce((n, s) => n + s.items.length, 0) || 1;
+  const found2 = extractSecondLanguage(menu);
+  menu.lang2 = found2 >= 5 && found2 / nItems2 >= 0.08 ? 'en' : '';
+  if (!menu.lang2) for (const s of menu.sections) {
+    if (s.title2) { s.title = s.title + ' | ' + s.title2; delete s.title2; }
+    if (s.note2) { s.note = s.note + ' ' + s.note2; delete s.note2; }
+    for (const it of s.items) {
+      if (it.name2) { it.name = it.name + ' | ' + it.name2; delete it.name2; }
+      if (it._d2split) { it.desc = it.desc + ' | ' + it.desc2; delete it.desc2; }
+    }
+  }
+  for (const s of menu.sections) for (const it of s.items) delete it._d2split;
   // Normale Schreibweise: Versalien werden zu Groß-/Kleinschreibung (Versalien lassen sich im Stil wieder einschalten)
   let capsHead = 0, capsName = 0, nHead = 0, nName = 0;
   for (const s of menu.sections) {
     if (s.title) { nHead++; if (isCaps(stripSup(s.title))) capsHead++; s.title = normCase(joinSpaced(s.title)); }
     if (s.note) s.note = normCase(s.note);
+    if (s.title2) s.title2 = normCase(joinSpaced(s.title2));
+    if (s.note2) s.note2 = normCase(s.note2);
     for (const it of s.items) {
       if (it.type !== 'sub') { nName++; if (isCaps(stripSup(it.name))) capsName++; }
       it.name = normCase(joinSpaced(it.name));
+      if (it.name2) it.name2 = normCase(it.name2);
       if (it.type === 'sub') continue;
       if (it.desc) it.desc = normCase(it.desc);
       if (it.desc2) it.desc2 = normCase(it.desc2);

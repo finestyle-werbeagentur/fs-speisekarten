@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Finestyle Speisekarten
  * Description:       Speisekarte als PDF hochladen – wird automatisch als sauberes HTML (gut für Google) auf der Seite ausgegeben und die PDF bleibt per Button im Browser abrufbar.
- * Version:           1.6.0
+ * Version:           1.7.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Finestyle Werbeagentur
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FS_SK_VERSION', '1.6.0' );
+define( 'FS_SK_VERSION', '1.7.0' );
 define( 'FS_SK_URL', plugin_dir_url( __FILE__ ) );
 define( 'FS_SK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FS_SK_CPT', 'fs_speisekarte' );
@@ -158,6 +158,8 @@ function fs_sk_sanitize_data( $data ) {
 		$sec = array(
 			'title' => $t( $s['title'] ?? '' ),
 			'note'  => $ta( $s['note'] ?? '' ),
+			'title2' => $t( $s['title2'] ?? '' ),
+			'note2'  => $ta( $s['note2'] ?? '' ),
 			'items' => array(),
 		);
 		foreach ( (array) ( $s['items'] ?? array() ) as $i ) {
@@ -167,7 +169,14 @@ function fs_sk_sanitize_data( $data ) {
 			if ( 'sub' === ( $i['type'] ?? '' ) ) {
 				$name = $t( $i['name'] ?? '' );
 				if ( '' !== $name ) {
-					$sec['items'][] = $key( $i, array_merge( array( 'type' => 'sub', 'name' => $name ), ! empty( $i['extra'] ) ? array( 'extra' => true ) : array() ) );
+					$sub = array( 'type' => 'sub', 'name' => $name );
+					if ( ! empty( $i['extra'] ) ) {
+						$sub['extra'] = true;
+					}
+					if ( '' !== $t( $i['name2'] ?? '' ) ) {
+						$sub['name2'] = $t( $i['name2'] );
+					}
+					$sec['items'][] = $key( $i, $sub );
 				}
 				continue;
 			}
@@ -177,6 +186,7 @@ function fs_sk_sanitize_data( $data ) {
 				'badge'    => $t( $i['badge'] ?? '', 20 ),
 				'nr'       => $t( $i['nr'] ?? '', 20 ),
 				'name'     => $t( $i['name'] ?? '' ),
+				'name2'    => $t( $i['name2'] ?? '' ),
 				'sup'      => $t( $i['sup'] ?? '', 60 ),
 				'desc'     => $ta( $i['desc'] ?? '' ),
 				'desc2'    => $ta( $i['desc2'] ?? '' ),
@@ -208,6 +218,9 @@ function fs_sk_sanitize_data( $data ) {
 	}
 	if ( in_array( $data['caps'] ?? '', array( 'head', 'all' ), true ) ) {
 		$clean['caps'] = $data['caps'];
+	}
+	if ( 'en' === ( $data['lang2'] ?? '' ) ) {
+		$clean['lang2'] = 'en';
 	}
 	foreach ( (array) ( $data['notes'] ?? array() ) as $n ) {
 		$n = $ta( $n );
@@ -762,6 +775,40 @@ function fs_sk_icons( $item ) {
 	return $out ? '<span class="fs-sk__icons">' . $out . '</span>' : '';
 }
 
+/** Zweisprachig ausgeben: Deutsch sichtbar, Englisch per Flagge umschaltbar. */
+function fs_sk_dual( $de_html, $en_html, $tag = 'span', $class = '' ) {
+	$c = $class ? $class . ' ' : '';
+	if ( '' === (string) $en_html ) {
+		return 'span' === $tag && ! $class ? $de_html : sprintf( '<%1$s class="%2$s">%3$s</%1$s>', $tag, esc_attr( trim( $c ) ), $de_html );
+	}
+	return sprintf( '<%1$s class="%2$sfs-sk__l1">%3$s</%1$s><%1$s class="%2$sfs-sk__l2" lang="en">%4$s</%1$s>', $tag, esc_attr( $c ), $de_html, $en_html );
+}
+
+/** Hat die Karte eine zweite Sprache? */
+function fs_sk_has_lang2( $data ) {
+	if ( ! empty( $data['lang2'] ) ) {
+		return true;
+	}
+	foreach ( $data['sections'] as $s ) {
+		if ( ! empty( $s['title2'] ) ) {
+			return true;
+		}
+		foreach ( $s['items'] as $it ) {
+			if ( ! empty( $it['name2'] ) || ! empty( $it['desc2'] ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+function fs_sk_flag( $lang ) {
+	if ( 'en' === $lang ) {
+		return '<svg class="fs-sk__flag" viewBox="0 0 60 30" aria-hidden="true"><clipPath id="fsuk"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="fsuk2"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#fsuk)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#fsuk2)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg>';
+	}
+	return '<svg class="fs-sk__flag" viewBox="0 0 5 3" aria-hidden="true"><path d="M0 0h5v3H0z"/><path d="M0 1h5v2H0z" fill="#D00"/><path d="M0 2h5v1H0z" fill="#FFCE00"/></svg>';
+}
+
 /** Auswahl-Option wie „a Hühnerfleisch“ (Buchstabe statt Nummer). */
 function fs_sk_is_option( $item ) {
 	return isset( $item['nr'] ) && preg_match( '/^[a-h]$/', $item['nr'] );
@@ -773,16 +820,16 @@ function fs_sk_legend( $used_icons ) {
 		return '';
 	}
 	$legend = array(
-		'vegetarisch' => array( 'vegetarisch', array( 'veg' => 'vegetarisch' ) ),
-		'vegan'       => array( 'vegan', array( 'veg' => 'vegan' ) ),
-		'spice1'      => array( 'leicht scharf', array( 'spice' => 1 ) ),
-		'spice2'      => array( 'mittelscharf', array( 'spice' => 2 ) ),
-		'spice3'      => array( 'scharf', array( 'spice' => 3 ) ),
+		'vegetarisch' => array( 'vegetarisch', array( 'veg' => 'vegetarisch' ), 'vegetarian' ),
+		'vegan'       => array( 'vegan', array( 'veg' => 'vegan' ), 'vegan' ),
+		'spice1'      => array( 'leicht scharf', array( 'spice' => 1 ), 'mildly spicy' ),
+		'spice2'      => array( 'mittelscharf', array( 'spice' => 2 ), 'medium spicy' ),
+		'spice3'      => array( 'scharf', array( 'spice' => 3 ), 'hot' ),
 	);
 	$out = '<ul class="fs-sk__legend" aria-label="Zeichenerklärung">';
 	foreach ( $legend as $key => $l ) {
 		if ( isset( $used_icons[ $key ] ) ) {
-			$out .= '<li>' . fs_sk_icons( $l[1] ) . ' ' . esc_html( $l[0] ) . '</li>';
+			$out .= '<li>' . fs_sk_icons( $l[1] ) . ' ' . ( $GLOBALS['fs_sk_dual'] ?? false ? fs_sk_dual( esc_html( $l[0] ), esc_html( $l[2] ) ) : esc_html( $l[0] ) ) . '</li>';
 		}
 	}
 	return $out . '</ul>';
@@ -803,7 +850,7 @@ function fs_sk_price( $price, $currency, $mode = 'einheitlich' ) {
 	return $price;
 }
 
-function fs_sk_download_button( $post_id, $text ) {
+function fs_sk_download_button( $post_id, $text, $is_html = false ) {
 	$url = fs_sk_pdf_url( $post_id );
 	if ( ! $url ) {
 		return '';
@@ -811,7 +858,7 @@ function fs_sk_download_button( $post_id, $text ) {
 	return sprintf(
 		'<a class="fs-sk__btn" href="%s" target="_blank" rel="noopener"><span class="fs-sk__btn-icon" aria-hidden="true"></span>%s</a>',
 		esc_url( $url ),
-		esc_html( $text )
+		$is_html ? $text : esc_html( $text )
 	);
 }
 
@@ -848,6 +895,7 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 		'preise'       => 'einheitlich',
 		'legende'      => 'oben',
 		'darstellung'  => '',
+		'sprache'      => '',
 	), $atts, 'speisekarte' );
 	$pmode = 'original' === $atts['preise'] ? 'original' : 'einheitlich';
 
@@ -885,6 +933,11 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 		}
 	}
 	$legend_pos = in_array( $atts['legende'], array( 'oben', 'unten', 'aus' ), true ) ? $atts['legende'] : 'oben';
+	$dual       = 'aus' !== ( $atts['sprache'] ?? '' ) && fs_sk_has_lang2( $data );
+	$GLOBALS['fs_sk_dual'] = $dual;
+	$d2         = function ( $de, $en ) use ( $dual ) {
+		return $dual ? fs_sk_dual( $de, $en ) : $de;
+	};
 	$accordion  = 'aufklappbar' === $layout;
 
 	ob_start();
@@ -892,13 +945,22 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 	printf( '<div class="fs-sk fs-sk--%s%s" id="speisekarte-%d" style="%s">', esc_attr( $layout ), esc_attr( $caps_class ), (int) $id, esc_attr( fs_sk_style_css( $style ) ) );
 
 	// Kopfbereich: Download, Zeichenerklärung, Alle öffnen
-	$top  = 'oben' === $atts['download'] ? fs_sk_download_button( $id, $btn ) : '';
+	$btn_html = ( $dual && ! $atts['button'] ) ? fs_sk_dual( 'Speisekarte als PDF', 'Menu as PDF' ) : esc_html( $btn );
+	$top  = 'oben' === $atts['download'] ? fs_sk_download_button( $id, $btn_html, true ) : '';
 	$top .= 'oben' === $legend_pos ? fs_sk_legend( $used_icons ) : '';
 	if ( $top ) {
 		echo '<div class="fs-sk__top">' . $top . '</div>'; // phpcs:ignore -- bereits escaped
 	}
+	$bar = '';
+	if ( $dual ) {
+		$bar .= '<button type="button" class="fs-sk__lang" aria-pressed="false" data-de="Deutsch" data-en="English">'
+			. '<span class="fs-sk__l1">' . fs_sk_flag( 'en' ) . ' English</span><span class="fs-sk__l2" lang="de">' . fs_sk_flag( 'de' ) . ' Deutsch</span></button>';
+	}
 	if ( $accordion && count( $data['sections'] ) > 1 ) {
-		echo '<p class="fs-sk__toggle-all"><button type="button" class="fs-sk__toggle" data-open="Alle Bereiche öffnen" data-close="Alle Bereiche schließen">Alle Bereiche öffnen</button></p>';
+		$bar .= '<button type="button" class="fs-sk__toggle" data-open="Alle Bereiche öffnen" data-close="Alle Bereiche schließen" data-open-en="Open all sections" data-close-en="Close all sections">Alle Bereiche öffnen</button>';
+	}
+	if ( $bar ) {
+		echo '<p class="fs-sk__toggle-all">' . $bar . '</p>'; // phpcs:ignore -- bereits escaped
 	}
 
 	if ( 'ja' === $atts['navigation'] && count( $data['sections'] ) > 1 ) {
@@ -926,18 +988,18 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 			printf(
 				'<summary class="fs-sk__summary"><%1$s class="fs-sk__title">%2$s</%1$s><span class="fs-sk__count">%3$s</span><span class="fs-sk__chev" aria-hidden="true"></span></summary>',
 				$h, // phpcs:ignore
-				fs_sk_title_html( $s['title'] ), // phpcs:ignore
-				$count ? esc_html( $count . ( 1 === $count ? ' Eintrag' : ' Einträge' ) ) : ''
+				$d2( fs_sk_title_html( $s['title'] ), ! empty( $s['title2'] ) ? fs_sk_title_html( $s['title2'] ) : '' ), // phpcs:ignore
+				$count ? $d2( esc_html( $count . ( 1 === $count ? ' Eintrag' : ' Einträge' ) ), esc_html( $count . ( 1 === $count ? ' item' : ' items' ) ) ) : '' // phpcs:ignore
 			);
 		} else {
 			printf( '<section class="fs-sk__section" id="fs-sk-%d-%d">', (int) $id, (int) $n );
 			if ( $has_title ) {
-				printf( '<%1$s class="fs-sk__title">%2$s</%1$s>', $h, fs_sk_title_html( $s['title'] ) ); // phpcs:ignore
+				printf( '<%1$s class="fs-sk__title">%2$s</%1$s>', $h, $d2( fs_sk_title_html( $s['title'] ), ! empty( $s['title2'] ) ? fs_sk_title_html( $s['title2'] ) : '' ) ); // phpcs:ignore
 			}
 		}
 		echo '<div class="fs-sk__body">';
 		if ( '' !== $s['note'] ) {
-			echo '<p class="fs-sk__note">' . fs_sk_inline( $s['note'] ) . '</p>'; // phpcs:ignore
+			echo $dual ? fs_sk_dual( fs_sk_inline( $s['note'] ), ! empty( $s['note2'] ) ? fs_sk_inline( $s['note2'] ) : '', 'p', 'fs-sk__note' ) : '<p class="fs-sk__note">' . fs_sk_inline( $s['note'] ) . '</p>'; // phpcs:ignore
 		}
 		if ( $s['items'] ) {
 			echo '<ul class="fs-sk__items">';
@@ -945,7 +1007,7 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 				if ( 'sub' === ( $it['type'] ?? '' ) ) {
 					$next   = $s['items'][ $k + 1 ] ?? null;
 					$is_opt = $next && 'sub' !== ( $next['type'] ?? '' ) && fs_sk_is_option( $next );
-					echo '<li class="fs-sk__sub' . ( $is_opt ? ' fs-sk__sub--opt' : '' ) . ( ! empty( $it['extra'] ) ? ' fs-sk__sub--extra' : '' ) . '">' . fs_sk_inline( $it['name'] ) . '</li>'; // phpcs:ignore
+					echo '<li class="fs-sk__sub' . ( $is_opt ? ' fs-sk__sub--opt' : '' ) . ( ! empty( $it['extra'] ) ? ' fs-sk__sub--extra' : '' ) . '">' . $d2( fs_sk_inline( $it['name'] ), ! empty( $it['name2'] ) ? fs_sk_inline( $it['name2'] ) : '' ) . '</li>'; // phpcs:ignore
 					continue;
 				}
 				$vars     = $it['variants'];
@@ -955,14 +1017,17 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 				if ( $nr_on && '' !== $it['nr'] ) {
 					echo '<span class="fs-sk__nr">' . esc_html( $it['nr'] ) . '</span>';
 				}
-				$name_html = $sup_on ? fs_sk_inline( $it['name'] ) : esc_html( fs_sk_plain( $it['name'] ) );
+				$fmt       = function ( $t ) use ( $sup_on ) {
+					return $sup_on ? fs_sk_inline( $t ) : esc_html( fs_sk_plain( $t ) );
+				};
+				$name_html = $d2( $fmt( $it['name'] ), ! empty( $it['name2'] ) ? $fmt( $it['name2'] ) : '' );
 				printf(
 					'<%1$s class="fs-sk__name">%2$s%3$s%4$s%5$s</%1$s>',
 					$hi, // phpcs:ignore
 					$name_html, // phpcs:ignore
 					( $sup_on && '' !== $it['sup'] ) ? fs_sk_sup( $it['sup'] ) : '', // phpcs:ignore
 					fs_sk_icons( $it ), // phpcs:ignore
-					! empty( $it['badge'] ) ? ' <span class="fs-sk__badge">' . esc_html( $it['badge'] ) . '</span>' : '' // phpcs:ignore
+					! empty( $it['badge'] ) ? ' <span class="fs-sk__badge">' . $d2( esc_html( $it['badge'] ), 'Neu' === $it['badge'] ? 'New' : '' ) . '</span>' : '' // phpcs:ignore
 				);
 				// erste Menge/Preis in derselben Zeile wie der Name
 				if ( $vars ) {
@@ -983,11 +1048,13 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 					}
 					echo '</ul>';
 				}
-				if ( '' !== $it['desc'] ) {
-					echo '<p class="fs-sk__desc">' . ( $sup_on ? fs_sk_inline( $it['desc'] ) : esc_html( fs_sk_plain( $it['desc'] ) ) ) . '</p>'; // phpcs:ignore
-				}
-				if ( '' !== $it['desc2'] ) {
-					echo '<p class="fs-sk__desc2" lang="en">' . ( $sup_on ? fs_sk_inline( $it['desc2'] ) : esc_html( fs_sk_plain( $it['desc2'] ) ) ) . '</p>'; // phpcs:ignore
+				$de2 = (string) ( $it['desc2'] ?? '' );
+				if ( $dual ) {
+					if ( '' !== $it['desc'] || '' !== $de2 ) {
+						echo fs_sk_dual( '' !== $it['desc'] ? $fmt( $it['desc'] ) : '', '' !== $de2 ? $fmt( $de2 ) : '', 'p', 'fs-sk__desc' ); // phpcs:ignore
+					}
+				} elseif ( '' !== $it['desc'] ) {
+					echo '<p class="fs-sk__desc">' . $fmt( $it['desc'] ) . '</p>'; // phpcs:ignore
 				}
 				echo '</li>';
 			}
@@ -1020,7 +1087,7 @@ add_shortcode( 'speisekarte', function ( $atts ) {
 	}
 
 	if ( 'unten' === $atts['download'] ) {
-		echo '<div class="fs-sk__top fs-sk__top--bottom">' . fs_sk_download_button( $id, $btn ) . '</div>'; // phpcs:ignore
+		echo '<div class="fs-sk__top fs-sk__top--bottom">' . fs_sk_download_button( $id, $btn_html, true ) . '</div>'; // phpcs:ignore
 	}
 	echo '</div>';
 

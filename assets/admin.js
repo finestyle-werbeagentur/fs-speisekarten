@@ -159,10 +159,15 @@ function iconBtn(txt, title, fn, cls = '') { return el('button', { type: 'button
 function render() {
   sync();
   editor.innerHTML = '';
-  const showLang2 = menu.sections.some((s) => s.items.some((i) => !isSub(i) && i.desc2));
+  const showLang2 = menu.lang2 === 'en' || menu.sections.some((s) => s.title2 || s.items.some((i) => i.name2 || i.desc2));
 
   if (!menu.sections.length) {
     editor.append(el('p', { class: 'fs-empty' }, 'Noch kein Inhalt. Lade oben eine PDF hoch – oder leg von Hand einen Bereich an.'));
+  }
+  if (menu.sections.length) {
+    editor.append(el('p', { class: 'fs-lang2-bar' }, showLang2
+      ? 'Englische Übersetzung ist aktiv: Gäste sehen sie, wenn sie auf der Seite auf die englische Flagge klicken (oder einen englischen Browser haben).'
+      : el('button', { type: 'button', class: 'button', onclick: () => { menu.lang2 = 'en'; sync(); render(); } }, '+ Englische Übersetzung hinzufügen')));
   }
 
   menu.sections.forEach((sec, si) => {
@@ -175,7 +180,9 @@ function render() {
         iconBtn('✕', 'Bereich löschen', () => { if (confirm(`Bereich „${sec.title || 'ohne Titel'}“ mit ${sec.items.length} Einträgen löschen?`)) { menu.sections.splice(si, 1); render(); } }, 'fs-ib--del'),
       ));
     card.append(head);
+    if (showLang2) card.append(field('Überschrift (Englisch)', sec.title2 || '', (v) => { sec.title2 = v; }, { ph: 'z. B. Starters', cls: 'fs-f--title fs-f--en' }));
     card.append(field('Hinweis zum Bereich (optional)', sec.note, (v) => { sec.note = v; }, { multi: true, ph: 'z. B. Alle Gerichte mit Reis', cls: 'fs-f--note' }));
+    if (showLang2 && (sec.note || sec.note2)) card.append(field('Hinweis (Englisch)', sec.note2 || '', (v) => { sec.note2 = v; }, { multi: true, cls: 'fs-f--note fs-f--en' }));
 
     const list = el('div', { class: 'fs-items' });
     sec.items.forEach((it, ii) => {
@@ -184,9 +191,10 @@ function render() {
       if (isSub(it)) {
         list.append(el('div', { class: 'fs-item fs-item--sub' }, el('div', { class: 'fs-item__top' },
           field('Zwischenzeile (z. B. „Dazu wahlweise:“)', it.name, (v) => { it.name = v; }, { cls: 'fs-f--name' }),
+          showLang2 ? field('Englisch', it.name2 || '', (v) => { it.name2 = v; }, { cls: 'fs-f--name fs-f--en' }) : null,
           el('label', { class: 'fs-extra-check', title: 'Beilagen oder Extras: wird abgesetzt dargestellt und nicht als Gericht gezählt' }, el('input', { type: 'checkbox', ...(it.extra ? { checked: '' } : {}), onchange: (e) => { if (e.target.checked) it.extra = true; else delete it.extra; refreshPreview(); } }), ' Beilagen-Block'),
           el('div', { class: 'fs-actions' }, upBtn, downBtn,
-            iconBtn('G', 'Doch ein Gericht daraus machen', () => { const nm = it.name; delete it.type; Object.assign(it, newItem(), { name: nm }); render(); }, 'fs-ib--h'),
+            iconBtn('G', 'Doch ein Gericht daraus machen', () => { const nm = it.name; delete it.type; Object.assign(it, newItem(), { name: nm, k: it.k }); render(); }, 'fs-ib--h'),
             iconBtn('✕', 'Zeile löschen', () => { sec.items.splice(ii, 1); render(); }, 'fs-ib--del')))));
         return;
       }
@@ -198,7 +206,7 @@ function render() {
         field('Hinweis', it.badge || '', (v) => { it.badge = v; }, { cls: 'fs-f--badge', ph: 'z. B. Neu' }),
         el('div', { class: 'fs-actions' },
           upBtn, downBtn,
-          iconBtn('Z', 'Das ist eine Zwischenzeile (z. B. „Dazu wahlweise:“)', () => { const nm = [it.nr, it.name].filter(Boolean).join(' '); for (const k of Object.keys(it)) delete it[k]; it.type = 'sub'; it.name = nm; render(); }, 'fs-ib--h'),
+          iconBtn('Z', 'Das ist eine Zwischenzeile (z. B. „Dazu wahlweise:“)', () => { const nm = [it.nr, it.name].filter(Boolean).join(' '); const kk = it.k; for (const k of Object.keys(it)) delete it[k]; it.type = 'sub'; it.name = nm; if (kk) it.k = kk; render(); }, 'fs-ib--h'),
           iconBtn('H', 'Das ist eine Überschrift – ab hier neuen Bereich beginnen', () => {
             const rest = sec.items.splice(ii);
             const first = rest.shift();
@@ -209,7 +217,11 @@ function render() {
         ));
       row.append(top);
       row.append(field('Beschreibung', it.desc, (v) => { it.desc = v; }, { multi: true, cls: 'fs-f--desc' }));
-      if (showLang2 || it.desc2) row.append(field('Zweite Sprache (z. B. Englisch)', it.desc2, (v) => { it.desc2 = v; }, { multi: true, cls: 'fs-f--desc' }));
+      if (showLang2) {
+        row.append(el('div', { class: 'fs-en-row' },
+          field('Name (Englisch)', it.name2 || '', (v) => { it.name2 = v; }, { cls: 'fs-f--name fs-f--en' }),
+          field('Beschreibung (Englisch)', it.desc2 || '', (v) => { it.desc2 = v; }, { multi: true, cls: 'fs-f--desc fs-f--en' })));
+      }
 
       const vars = el('div', { class: 'fs-vars' });
       it.variants.forEach((v, vi) => {
@@ -338,7 +350,7 @@ function renderPreview() {
         h += '</div>';
         if (v.length > 1) h += '<ul class="fs-sk__variants">' + v.slice(1).map((x) => `<li><span class="fs-sk__size">${esc(x.size)}</span><span class="fs-sk__price">${esc(price(x.price))}</span></li>`).join('') + '</ul>';
         if (it.desc) h += `<p class="fs-sk__desc">${inl(it.desc)}</p>`;
-        if (it.desc2) h += `<p class="fs-sk__desc2">${inl(it.desc2)}</p>`;
+
         h += '</li>';
       }
       h += '</ul>';

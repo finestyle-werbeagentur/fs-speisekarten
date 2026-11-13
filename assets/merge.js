@@ -10,7 +10,7 @@ const norm = (s) => String(s ?? '').replace(/\{[^}]*\}/g, '').toLowerCase().repl
 const hash = (s) => { let h = 5381; for (const c of s) h = ((h * 33) ^ c.codePointAt(0)) >>> 0; return h.toString(36); };
 const isSub = (it) => it && it.type === 'sub';
 const clone = (o) => JSON.parse(JSON.stringify(o));
-const FIELDS = ['type', 'name', 'nr', 'sup', 'desc', 'desc2', 'veg', 'spice', 'badge', 'extra', 'variants'];
+const FIELDS = ['type', 'name', 'name2', 'nr', 'sup', 'desc', 'desc2', 'veg', 'spice', 'badge', 'extra', 'variants'];
 const same = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
 const val = (it, f) => { const v = it[f]; if (f === 'spice') return v || 0; if (f === 'variants') return (v || []).map((x) => ({ size: x.size || '', price: x.price || '' })); return v || ''; };
 
@@ -56,6 +56,7 @@ export function mergeEdits(auto, saved, fresh) {
     if (!o) { if (!same(s.title, a.title) || !same(s.note, a.note)) report.lost.push('Bereich „' + (s.title || a.title) + '“'); continue; }
     if (!same(s.title, a.title)) { o.title = s.title; report.kept++; }
     if (!same(s.note || '', a.note || '')) { o.note = s.note || ''; report.kept++; }
+    for (const f of ['title2', 'note2']) if (!same(s[f] || '', a[f] || '')) { if (s[f]) o[f] = s[f]; else delete o[f]; report.kept++; }
   }
   for (const k in aSec) if (!savedKeys.has(k) && oSec[k]) { out.sections.splice(out.sections.indexOf(oSec[k]), 1); delete oSec[k]; report.kept++; }
 
