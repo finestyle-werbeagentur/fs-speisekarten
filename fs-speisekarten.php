@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Finestyle Speisekarten
  * Description:       Speisekarte als PDF hochladen – wird automatisch als sauberes HTML (gut für Google) auf der Seite ausgegeben und die PDF bleibt per Button im Browser abrufbar.
- * Version:           1.7.0
+ * Version:           1.8.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Finestyle Werbeagentur
@@ -14,13 +14,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FS_SK_VERSION', '1.7.0' );
+define( 'FS_SK_VERSION', '1.8.0' );
 define( 'FS_SK_URL', plugin_dir_url( __FILE__ ) );
 define( 'FS_SK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FS_SK_CPT', 'fs_speisekarte' );
 
 require_once FS_SK_DIR . 'includes/updater.php';
 require_once FS_SK_DIR . 'includes/bulk.php';
+require_once FS_SK_DIR . 'includes/google.php';
 
 /** PDFs im Browser öffnen statt herunterladen (falls der Server mod_headers kann). */
 function fs_sk_protect_dir( $dir ) {
@@ -396,6 +397,10 @@ function fs_sk_render_side( $post ) {
 		<span class="fs-inline"><input type="text" id="fs-sk-filename" name="fs_sk_filename" value="<?php echo esc_attr( $filename ); ?>"><code>.pdf</code></span>
 		<p class="fs-small">Bleibt bei jedem Update gleich – Links und Google-Einträge funktionieren weiter.</p>
 
+		<p class="fs-side__l">Google-Profil</p>
+		<label class="fs-check"><input type="checkbox" name="fs_sk_google" value="1" <?php checked( 'no' !== get_post_meta( $post->ID, '_fs_sk_google', true ) ); ?>> Karte an Google senden</label>
+		<p class="fs-small">Die Karte erscheint im Google-Unternehmensprofil, sobald das Kundenpanel sie überträgt.</p>
+
 		<p class="fs-side__save">Änderungen werden erst gespeichert, wenn du oben auf <strong>„Aktualisieren“</strong> klickst.</p>
 
 		<details class="fs-more">
@@ -455,6 +460,9 @@ add_action( 'save_post_' . FS_SK_CPT, function ( $post_id ) {
 		}
 		update_post_meta( $post_id, '_fs_sk_filename', $fn );
 	}
+
+	// Google-Profil (Häkchen fehlt im Formular = nicht senden)
+	update_post_meta( $post_id, '_fs_sk_google', empty( $_POST['fs_sk_google'] ) ? 'no' : 'yes' );
 
 	// Aussehen
 	if ( isset( $_POST['fs_sk_style'] ) ) {

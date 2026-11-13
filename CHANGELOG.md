@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.8.0
+- Vorbereitung für Google: Jede Website gibt ihre Karten im Google-Format aus (`/wp-json/fs-speisekarten/v1/google`). Das Kundenpanel holt sie dort ab und überträgt sie ins Google-Unternehmensprofil
+- Deutsch und Englisch, Preise, mehrere Größen, vegetarisch/vegan und Schärfe werden mitgegeben
+- Neues Häkchen „Karte an Google senden“ in der Seitenleiste jeder Karte (standardmäßig an)
+
 ## 1.7.0
 - Englische Übersetzung per Flagge: Die Karte zeigt nur Deutsch, ein Klick auf die englische Flagge zeigt nur die englischen Texte
 - Gäste mit englischem Browser sehen die Karte automatisch auf Englisch

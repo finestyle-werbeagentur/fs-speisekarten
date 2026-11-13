@@ -8,3 +8,12 @@ WordPress-Plugin von Finestyle: Speisekarte als PDF hochladen → wird automatis
 3. Nach `main` pushen.
 
 GitHub baut dann automatisch `fs-speisekarten.zip` und legt ein Release an. Alle Seiten mit dem Plugin zeigen anschließend „Update verfügbar“ – auch in MainWP.
+
+## Google-Unternehmensprofil
+
+Jede Website gibt ihre veröffentlichten Karten im Google-Format aus:
+
+- Alle Karten: `https://kunde.de/wp-json/fs-speisekarten/v1/google`
+- Eine Karte: `https://kunde.de/wp-json/fs-speisekarten/v1/google/{id}`
+
+Die Antwort enthält `foodMenus` (geht unverändert per `PATCH …/locations/{id}/foodMenus` an Google), dazu `hash` (ändert sich nur, wenn sich die Karte ändert) und `cards` (Übersicht). Karten ohne Häkchen „Karte an Google senden“ werden ausgelassen, Gerichte ohne Preis auch (Google verlangt einen Preis).
