@@ -1,6 +1,9 @@
 /* Finestyle Speisekarten – Bearbeiten-Seite */
 import * as pdfjsLib from './pdfjs/pdf.min.js';
-import { pdfToMenu } from './parser.js';
+// Versionsnummer an die Module hängen, damit der Browser nach einem Update nicht den alten Parser nimmt
+const VER = new URL(import.meta.url).search;
+const { pdfToMenu } = await import('./parser.js' + VER);
+const { withKeys, mergeEdits } = await import('./merge.js' + VER);
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./pdfjs/pdf.worker.min.js', import.meta.url).href;
 
@@ -9,6 +12,8 @@ const init = JSON.parse($('#fs-sk-initial').textContent);
 let menu = init.data && init.data.sections ? init.data : { sections: [], notes: [] };
 
 const hidden = $('#fs-sk-data');
+const hiddenAuto = $('#fs-sk-auto');
+let auto = init.auto && init.auto.sections ? init.auto : null;
 const editor = $('#fs-sk-editor');
 const preview = $('#fs-sk-preview');
 const statusEl = $('#fs-sk-status');
@@ -73,17 +78,30 @@ async function handleFile(file, reread = false) {
       return;
     }
     if (!reread) {
-      const keepOld = menu.sections.length && !confirm('Die neue PDF ersetzt die bisherige Karte im Editor. Fortfahren?');
+      const keepOld = menu.sections.length && !confirm('Die neue PDF ersetzt die bisherige Karte im Editor.' + (auto ? '\n\nKorrekturen, die du von Hand gemacht hast, werden übernommen.' : '') + '\n\nFortfahren?');
       if (keepOld) { showStatus('Abgebrochen – der bisherige Inhalt bleibt. Die neue PDF wird beim Speichern trotzdem zum Download ausgetauscht.', 'warn'); return; }
     }
-    carryFlags(menu, result);
-    menu = result;
+    const fresh = withKeys(result);
+    let note = '';
+    const hasKeys = menu.sections.some((s) => s.k);
+    if (auto && hasKeys) {
+      // Handkorrekturen übernehmen
+      const m = mergeEdits(auto, menu, fresh);
+      menu = m.menu;
+      if (m.kept) note += ` Deine <strong>${m.kept}</strong> Handkorrektur${m.kept === 1 ? '' : 'en'} ${m.kept === 1 ? 'wurde' : 'wurden'} übernommen.`;
+      if (m.lost.length) note += ` <strong>Nicht mehr zuzuordnen:</strong> ${m.lost.map(esc).join(', ')} – bitte prüfen.`;
+    } else {
+      carryFlags(menu, fresh);
+      menu = JSON.parse(JSON.stringify(fresh));
+    }
+    auto = fresh;
+    hiddenAuto.value = JSON.stringify(auto);
     const missing = result.sections.reduce((n, s) => n + s.items.filter((i) => !isSub(i) && !i.variants.length).length, 0);
     updatePdfColorsBtn();
     showStatus(`<strong>Fertig!</strong> ${nItems} Einträge in ${result.sections.length} Bereichen erkannt` +
       (missing ? ` – bei <strong>${missing}</strong> fehlt ein Preis (gelb markiert).` : '.') +
       (result.colors && Object.keys(result.colors).length ? ' Unter „Aussehen“ kannst du den <strong>Stil aus der PDF übernehmen</strong>.' : '') +
-      ' Prüf die Karte unten kurz und klick dann auf <strong>„Aktualisieren“</strong>.', missing ? 'warn' : 'ok');
+      note + ' Prüf die Karte unten kurz und klick dann auf <strong>„Aktualisieren“</strong>.', missing ? 'warn' : 'ok');
     render();
   } catch (e) {
     console.error(e);
@@ -100,7 +118,8 @@ if (rereadBtn) {
   rereadBtn.hidden = !init.pdfUrl;
   rereadBtn.addEventListener('click', async () => {
     if (!init.pdfUrl) return;
-    if (menu.sections.length && !confirm('Die PDF wird neu ausgelesen und ersetzt die Karte im Editor.\n\nKorrekturen, die du von Hand gemacht hast, gehen dabei verloren (Symbole und Schärfe bleiben erhalten).\n\nFortfahren?')) return;
+    const tracked = auto && menu.sections.some((s) => s.k);
+    if (menu.sections.length && !confirm('Die PDF wird neu ausgelesen.\n\n' + (tracked ? 'Korrekturen, die du von Hand gemacht hast, werden übernommen.' : 'Achtung: Bei dieser Karte sind Handkorrekturen noch nicht gespeichert – sie gehen einmalig verloren (Symbole und Schärfe bleiben). Ab jetzt merkt sich das Plugin jede Korrektur.') + '\n\nFortfahren?')) return;
     rereadBtn.disabled = true;
     try {
       const res = await fetch(init.pdfUrl + (init.pdfUrl.includes('?') ? '&' : '?') + 'nocache=' + Date.now(), { credentials: 'same-origin' });

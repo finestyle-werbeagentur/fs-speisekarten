@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Finestyle Speisekarten
  * Description:       Speisekarte als PDF hochladen – wird automatisch als sauberes HTML (gut für Google) auf der Seite ausgegeben und die PDF bleibt per Button im Browser abrufbar.
- * Version:           1.5.0
+ * Version:           1.6.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Finestyle Werbeagentur
@@ -14,12 +14,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FS_SK_VERSION', '1.5.0' );
+define( 'FS_SK_VERSION', '1.6.0' );
 define( 'FS_SK_URL', plugin_dir_url( __FILE__ ) );
 define( 'FS_SK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FS_SK_CPT', 'fs_speisekarte' );
 
 require_once FS_SK_DIR . 'includes/updater.php';
+require_once FS_SK_DIR . 'includes/bulk.php';
 
 /** PDFs im Browser öffnen statt herunterladen (falls der Server mod_headers kann). */
 function fs_sk_protect_dir( $dir ) {
@@ -71,6 +72,18 @@ add_action( 'post_edit_form_tag', function ( $post ) {
 /* -------------------------------------------------------------------------
  * 2. Hilfsfunktionen
  * ---------------------------------------------------------------------- */
+function fs_sk_save_auto( $post_id, $auto ) {
+	update_post_meta( $post_id, '_fs_sk_auto', wp_slash( wp_json_encode( fs_sk_sanitize_data( $auto ), JSON_UNESCAPED_UNICODE ) ) );
+	update_post_meta( $post_id, '_fs_sk_parser', FS_SK_VERSION );
+}
+
+/** Reines Auslese-Ergebnis vom letzten Mal (Vergleichsbasis für Handkorrekturen). */
+function fs_sk_get_auto( $post_id ) {
+	$raw = get_post_meta( $post_id, '_fs_sk_auto', true );
+	$a   = $raw ? json_decode( $raw, true ) : null;
+	return is_array( $a ) ? $a : null;
+}
+
 function fs_sk_get_data( $post_id ) {
 	$raw  = get_post_meta( $post_id, '_fs_sk_data', true );
 	$data = $raw ? json_decode( $raw, true ) : null;
@@ -130,6 +143,14 @@ function fs_sk_sanitize_data( $data ) {
 	$ta = function ( $v ) {
 		return mb_substr( trim( preg_replace( '/\s+/u', ' ', sanitize_textarea_field( (string) $v ) ) ), 0, 2000 );
 	};
+	// Schlüssel zum Wiedererkennen beim Neu-Auslesen (Handkorrekturen bleiben erhalten)
+	$key = function ( $arr, $target ) {
+		$k = preg_replace( '/[^a-z0-9_]/', '', strtolower( (string) ( $arr['k'] ?? '' ) ) );
+		if ( '' !== $k ) {
+			$target['k'] = substr( $k, 0, 40 );
+		}
+		return $target;
+	};
 	foreach ( (array) ( $data['sections'] ?? array() ) as $s ) {
 		if ( ! is_array( $s ) ) {
 			continue;
@@ -146,7 +167,7 @@ function fs_sk_sanitize_data( $data ) {
 			if ( 'sub' === ( $i['type'] ?? '' ) ) {
 				$name = $t( $i['name'] ?? '' );
 				if ( '' !== $name ) {
-					$sec['items'][] = array_merge( array( 'type' => 'sub', 'name' => $name ), ! empty( $i['extra'] ) ? array( 'extra' => true ) : array() );
+					$sec['items'][] = $key( $i, array_merge( array( 'type' => 'sub', 'name' => $name ), ! empty( $i['extra'] ) ? array( 'extra' => true ) : array() ) );
 				}
 				continue;
 			}
@@ -172,11 +193,11 @@ function fs_sk_sanitize_data( $data ) {
 				}
 			}
 			if ( '' !== $item['name'] || '' !== $item['desc'] || $item['variants'] ) {
-				$sec['items'][] = $item;
+				$sec['items'][] = $key( $i, $item );
 			}
 		}
 		if ( '' !== $sec['title'] || '' !== $sec['note'] || $sec['items'] ) {
-			$clean['sections'][] = $sec;
+			$clean['sections'][] = $key( $s, $sec );
 		}
 	}
 	foreach ( (array) ( $data['colors'] ?? array() ) as $k => $c ) {
@@ -214,6 +235,7 @@ function fs_sk_render_box( $post ) {
 	$filename = fs_sk_filename( $post->ID );
 	$initial  = array(
 		'data'     => $data,
+		'auto'     => fs_sk_get_auto( $post->ID ),
 		'pdfUrl'   => $pdf_url,
 		'updated'  => $updated ? wp_date( 'd.m.Y \u\m H:i \U\h\r', $updated ) : '',
 		'postId'   => $post->ID,
@@ -224,6 +246,7 @@ function fs_sk_render_box( $post ) {
 	<div id="fs-sk-app" class="fs-sk-admin">
 		<script type="application/json" id="fs-sk-initial"><?php echo wp_json_encode( $initial, JSON_HEX_TAG | JSON_HEX_AMP ); ?></script>
 		<input type="hidden" name="fs_sk_data" id="fs-sk-data" value="<?php echo esc_attr( wp_json_encode( $data ) ); ?>">
+		<input type="hidden" name="fs_sk_auto" id="fs-sk-auto" value="">
 
 		<!-- Schritt 1 -->
 		<div class="fs-step">
@@ -429,6 +452,12 @@ add_action( 'save_post_' . FS_SK_CPT, function ( $post_id ) {
 	if ( isset( $_POST['fs_sk_data'] ) ) {
 		$data = json_decode( wp_unslash( $_POST['fs_sk_data'] ), true ); // phpcs:ignore -- wird unten bereinigt
 		update_post_meta( $post_id, '_fs_sk_data', wp_slash( wp_json_encode( fs_sk_sanitize_data( $data ), JSON_UNESCAPED_UNICODE ) ) );
+		if ( ! empty( $_POST['fs_sk_auto'] ) ) {
+			$auto = json_decode( wp_unslash( $_POST['fs_sk_auto'] ), true ); // phpcs:ignore -- wird bereinigt
+			if ( is_array( $auto ) ) {
+				fs_sk_save_auto( $post_id, $auto );
+			}
+		}
 		update_post_meta( $post_id, '_fs_sk_updated', time() );
 	}
 

@@ -117,3 +117,16 @@ textarea.fs-in { resize: vertical; min-height: 32px; overflow: hidden; line-heig
 .fs-current-row .fs-current { margin: 0; }
 #fs-sk-reread { border-color: var(--accent); color: var(--accent); }
 .fs-extra-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; color: #50575e; align-self: end; padding-bottom: 6px; }
+
+/* Alle neu auslesen */
+.fs-bulk__intro { max-width: 720px; font-size: 14px; }
+.fs-bulk__list { margin: 16px 0; max-width: 820px; }
+.fs-bulk__row { display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; margin: 0 0 6px; background: #fff; border: 1px solid #dcdcde; border-radius: 8px; }
+.fs-bulk__row a { font-weight: 600; text-decoration: none; }
+.fs-bulk__msg { color: #50575e; }
+.fs-bulk__dot { width: 10px; height: 10px; border-radius: 50%; background: #c3c4c7; flex: none; align-self: center; }
+.fs-bulk__row[data-state="busy"] .fs-bulk__dot { background: #0F6E75; animation: fs-pulse 1s infinite; }
+.fs-bulk__row[data-state="ok"] .fs-bulk__dot { background: #00a32a; }
+.fs-bulk__row[data-state="warn"] .fs-bulk__dot { background: #dba617; }
+.fs-bulk__row[data-state="stop"] .fs-bulk__dot { background: #d63638; }
+@keyframes fs-pulse { 50% { opacity: .35; } }
