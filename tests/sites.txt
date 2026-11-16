@@ -1,0 +1,4 @@
+# Alle Websites mit dem Plugin „Finestyle Speisekarten“ – eine Domain pro Zeile.
+# Vor jedem Release werden alle Karten dieser Websites mit der neuen und der letzten
+# Version ausgelesen und verglichen.
+unthai.de

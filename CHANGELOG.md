@@ -1,5 +1,8 @@
 # Änderungen
 
+## 1.9.2
+- Sicherung vor Updates: Jede neue Version wird zuerst mit allen Karten aller Kunden-Websites getestet. Ändert sich dabei etwas am Auslesen, wird die Version erst nach Prüfung veröffentlicht
+
 ## 1.9.1
 - Google bekommt die Karte so, wie Gäste sie lesen: „Dazu wahlweise“ und „Wähle dein Topping“ werden zu Auswahlmöglichkeiten beim Gericht statt zu eigenen Gerichten
 - Gerichte ohne eigenen Preis (Preis je nach Topping) und Angebote mit Preis in der Überschrift (z. B. Mittagsmenü) kommen jetzt auch bei Google an

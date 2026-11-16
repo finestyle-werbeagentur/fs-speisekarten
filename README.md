@@ -21,3 +21,7 @@ Die Antwort enthält `foodMenus` (geht unverändert per `PATCH …/locations/{id
 **Auslesen geändert?** Nur wenn sich `assets/parser.js` ändert, auch `FS_SK_PARSER` in `fs-speisekarten.php` hochsetzen. Dann werden nach dem Update alle Karten zum Neu-Auslesen vorgemerkt – sonst nicht.
 
 **Automatisch an Google:** Nach dem Speichern einer veröffentlichten Karte meldet sich die Website beim Kundenpanel (`FS_SK_PANEL_PING`, Standard `https://panel.finestyle.eu/google.php?a=ping`). Das Panel holt die Karte über `/wp-json/fs-speisekarten/v1/google` und sendet sie an das zugeordnete Google-Profil. Abschalten pro Website: `define( 'FS_SK_PANEL_PING', '' );` in der wp-config.php.
+
+## Kartentest vor jedem Release
+
+Vor jedem Release liest die Aktion alle Karten aller Websites aus `tests/sites.txt` mit der neuen und der zuletzt veröffentlichten Version aus und vergleicht sie (`tests/karten.mjs`). Ändert sich nichts, geht das Release raus. Ändert sich etwas, stoppt es und die Unterschiede stehen in der Zusammenfassung des Laufs. Gewollte Änderungen: `[karten-ok]` in die Commit-Nachricht. Neue Kunden-Website mit dem Plugin → Domain in `tests/sites.txt` eintragen.

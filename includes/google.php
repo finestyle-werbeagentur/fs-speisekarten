@@ -317,6 +317,19 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( fs_sk_google_response( fs_sk_google_ids() ) );
 		},
 	) );
+	// Liste aller veröffentlichten Karten mit PDF (für den automatischen Kartentest vor Updates)
+	register_rest_route( 'fs-speisekarten/v1', '/cards', array(
+		'methods'             => 'GET',
+		'permission_callback' => '__return_true',
+		'callback'            => function () {
+			$ids   = get_posts( array( 'post_type' => FS_SK_CPT, 'post_status' => 'publish', 'posts_per_page' => 100, 'fields' => 'ids' ) );
+			$cards = array();
+			foreach ( $ids as $id ) {
+				$cards[] = array( 'id' => (int) $id, 'title' => get_the_title( $id ), 'pdf' => (string) fs_sk_pdf_url( $id, false ), 'parser' => (string) get_post_meta( $id, '_fs_sk_parser', true ) );
+			}
+			return rest_ensure_response( array( 'version' => FS_SK_VERSION, 'cards' => $cards ) );
+		},
+	) );
 	register_rest_route( 'fs-speisekarten/v1', '/google/(?P<id>\d+)', array(
 		'methods'             => 'GET',
 		'permission_callback' => '__return_true',
