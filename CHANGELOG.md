@@ -1,5 +1,9 @@
 # Änderungen
 
+## 1.9.1
+- Google bekommt die Karte so, wie Gäste sie lesen: „Dazu wahlweise“ und „Wähle dein Topping“ werden zu Auswahlmöglichkeiten beim Gericht statt zu eigenen Gerichten
+- Gerichte ohne eigenen Preis (Preis je nach Topping) und Angebote mit Preis in der Überschrift (z. B. Mittagsmenü) kommen jetzt auch bei Google an
+
 ## 1.9.0
 - Speisekarte geht automatisch an Google: Nach dem Speichern gibt die Website dem Finestyle-Kundenpanel Bescheid, das die Karte an das zugeordnete Google-Profil schickt
 - In der Seitenleiste jeder Karte steht, ob und wann die Karte bei Google angekommen ist

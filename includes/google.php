@@ -61,6 +61,170 @@ function fs_sk_google_labels( $name, $desc = '', $name2 = '', $desc2 = '' ) {
 	return $labels;
 }
 
+
+/** „MITTAGSMENÜ 14,90 € p.P.“ → array( 'Mittagsmenü', 14.9, '€ p.P.' ) */
+function fs_sk_google_split_title( $title ) {
+	$title = trim( (string) $title );
+	if ( preg_match( '/^(.*?\S)\s+(?:ab\s+)?(\d{1,3}[.,]\d{1,2})\s*(?:€|EUR|Euro)\s*(.*)$/iu', $title, $m ) ) {
+		return array( $m[1], (float) str_replace( ',', '.', $m[2] ), trim( $m[3] ) );
+	}
+	return array( $title, null, '' );
+}
+
+/** Preise eines Eintrags: array( array( 'size' => …, 'num' => … ), … ) */
+function fs_sk_google_prices( $it ) {
+	$prices = array();
+	foreach ( (array) ( $it['variants'] ?? array() ) as $v ) {
+		$n = fs_sk_price_number( $v['price'] ?? '' );
+		if ( null !== $n ) {
+			$prices[] = array( 'size' => trim( (string) ( $v['size'] ?? '' ) ), 'num' => $n );
+		}
+	}
+	return $prices;
+}
+
+function fs_sk_google_option( $label, $num ) {
+	return array(
+		'labels'     => array( array( 'displayName' => mb_substr( fs_sk_plain( (string) $label ), 0, 140 ), 'languageCode' => 'de' ) ),
+		'attributes' => array( 'price' => fs_sk_google_money( $num ) ),
+	);
+}
+
+/** Ein Gericht im Google-Format. $choices: Auswahl (Name + Preis), die zu diesem Gericht gehört. */
+function fs_sk_google_item( $it, $prices, $choices = array() ) {
+	if ( $choices && ! $prices ) {
+		$prices = array( array( 'size' => '', 'num' => min( wp_list_pluck( $choices, 'num' ) ) ) );
+	}
+	$attr = array( 'price' => fs_sk_google_money( $prices[0]['num'] ) );
+	if ( 'vegan' === ( $it['veg'] ?? '' ) ) {
+		$attr['dietaryRestriction'] = array( 'VEGAN' );
+	} elseif ( 'vegetarisch' === ( $it['veg'] ?? '' ) ) {
+		$attr['dietaryRestriction'] = array( 'VEGETARIAN' );
+	}
+	$spice = (int) ( $it['spice'] ?? 0 );
+	if ( $spice > 0 ) {
+		$attr['spiciness'] = array( 1 => 'MILD', 2 => 'MEDIUM', 3 => 'HOT' )[ min( 3, $spice ) ];
+	}
+	$mi = array(
+		'labels'     => fs_sk_google_labels( $it['name'], $it['desc'] ?? '', $it['name2'] ?? '', $it['desc2'] ?? '' ),
+		'attributes' => $attr,
+	);
+	$opts = array();
+	if ( count( $prices ) > 1 ) { // mehrere Größen
+		foreach ( $prices as $i => $p ) {
+			$opts[] = fs_sk_google_option( '' !== $p['size'] ? $p['size'] : 'Variante ' . ( $i + 1 ), $p['num'] );
+		}
+	} elseif ( '' !== $prices[0]['size'] ) { // eine Größe (z. B. 0,5 l) → in die Beschreibung
+		$d = $mi['labels'][0]['description'] ?? '';
+		$mi['labels'][0]['description'] = trim( $prices[0]['size'] . ( '' !== $d ? ' · ' . $d : '' ) );
+	}
+	foreach ( $choices as $c ) { // „Dazu wahlweise“ / „Wähle dein Topping“
+		$opts[] = fs_sk_google_option( $c['name'], $c['num'] );
+	}
+	if ( $opts ) {
+		$mi['options'] = $opts;
+	}
+	return $mi;
+}
+
+/**
+ * Einträge eines Bereichs so umbauen, wie Gäste die Karte lesen:
+ * - a/b/c-Einträge nach einem Gericht („Dazu wahlweise: Huhn 6,00 …“) → Auswahl bei diesem Gericht
+ * - Gerichte ohne Preis + spätere a/b/c-Liste („Wähle dein Topping“) → jedes Gericht mit dieser Auswahl
+ * - Einträge ohne Preis vor Gerichten mit Preis („Wähle zuerst deine Nudeln“) → Auswahl bei diesen Gerichten
+ * - Bereich mit Preis in der Überschrift („Mittagsmenü 14,90 €“) → ein Angebot mit Beschreibung
+ */
+function fs_sk_google_section_items( $s ) {
+	$rows = array();
+	foreach ( $s['items'] as $it ) {
+		$name = trim( fs_sk_plain( (string) ( $it['name'] ?? '' ) ) );
+		if ( '' === $name ) {
+			continue;
+		}
+		if ( 'sub' === ( $it['type'] ?? '' ) ) {
+			$rows[] = array( 'kind' => 'sub', 'name' => $name );
+			continue;
+		}
+		$prices = fs_sk_google_prices( $it );
+		$letter = (bool) preg_match( '/^[a-z]\.?$/i', trim( (string) ( $it['nr'] ?? '' ) ) );
+		$rows[] = array( 'kind' => $letter && $prices ? 'choice' : ( $prices ? 'dish' : 'free' ), 'it' => $it, 'name' => $name, 'prices' => $prices );
+	}
+
+	// Bereich mit Preis in der Überschrift und ohne eigene Preise → ein Angebot
+	list( $title, $tprice, $tunit ) = fs_sk_google_split_title( $s['title'] ?? '' );
+	$has_priced = (bool) array_filter( $rows, function ( $r ) { return 'sub' !== $r['kind'] && 'free' !== $r['kind']; } );
+	if ( null !== $tprice && ! $has_priced && $rows ) {
+		$parts = array();
+		foreach ( $rows as $r ) {
+			$parts[] = $r['name'];
+		}
+		$desc = preg_replace( '/:\s*·\s*/u', ': ', implode( ' · ', $parts ) );
+		if ( preg_match( '/^p\.?\s*P\.?$/iu', $tunit ) ) {
+			$desc = 'Preis pro Person · ' . $desc;
+		} elseif ( '' !== $tunit ) {
+			$desc = $tunit . ' · ' . $desc;
+		}
+		$it = array( 'name' => $title, 'desc' => $desc, 'name2' => fs_sk_google_split_title( $s['title2'] ?? '' )[0] );
+		return array( fs_sk_google_item( $it, array( array( 'size' => '', 'num' => $tprice ) ) ) );
+	}
+
+	$out       = array();
+	$last_dish = false;
+	$pending = array(); // Gerichte ohne Preis, die auf eine Auswahl warten
+	$pre     = array(); // Auswahl ohne Preis vor Gerichten („Wähle zuerst deine Nudeln“)
+	$n       = count( $rows );
+	for ( $i = 0; $i < $n; $i++ ) {
+		$r = $rows[ $i ];
+		if ( 'sub' === $r['kind'] ) {
+			continue;
+		}
+		if ( 'free' === $r['kind'] ) {
+			$pending[] = $r;
+			continue;
+		}
+		if ( 'choice' === $r['kind'] ) {
+			// ganze a/b/c-Liste einsammeln
+			$choices = array();
+			for ( ; $i < $n && ( 'choice' === $rows[ $i ]['kind'] || 'sub' === $rows[ $i ]['kind'] ); $i++ ) {
+				if ( 'choice' === $rows[ $i ]['kind'] ) {
+					$choices[] = array( 'name' => $rows[ $i ]['name'], 'num' => $rows[ $i ]['prices'][0]['num'] );
+				}
+			}
+			$i--;
+			if ( $pending ) { // „Wähle dein Topping“ für alle Gerichte davor
+				foreach ( $pending as $p ) {
+					$out[] = fs_sk_google_item( $p['it'], array(), $choices );
+				}
+				$pending = array();
+			} elseif ( $out && ! empty( $last_dish ) ) { // „Dazu wahlweise“ beim letzten Gericht
+				$last = array_pop( $out );
+				foreach ( $choices as $c ) {
+					$last['options'][] = fs_sk_google_option( $c['name'], $c['num'] );
+				}
+				$out[] = $last;
+			} else {
+				foreach ( $choices as $c ) {
+					$out[] = fs_sk_google_item( array( 'name' => $c['name'] ), array( array( 'size' => '', 'num' => $c['num'] ) ) );
+				}
+			}
+			$last_dish = false;
+			continue;
+		}
+		// Gericht mit Preis
+		if ( $pending ) { // Auswahl ohne Preis davor („Wähle zuerst deine Nudeln“)
+			$pre     = $pending;
+			$pending = array();
+		}
+		$choices = array();
+		foreach ( $pre as $p ) {
+			$choices[] = array( 'name' => $p['name'], 'num' => $r['prices'][0]['num'] );
+		}
+		$out[]     = fs_sk_google_item( $r['it'], $r['prices'], count( $r['prices'] ) > 1 ? array() : $choices );
+		$last_dish = true;
+	}
+	return $out;
+}
+
 /** Eine Karte → ein Google-"menu". Gibt null zurück, wenn nichts Brauchbares drin ist. */
 function fs_sk_google_menu( $post_id ) {
 	$post = get_post( $post_id );
@@ -72,56 +236,10 @@ function fs_sk_google_menu( $post_id ) {
 	$count    = 0;
 
 	foreach ( $data['sections'] as $s ) {
-		$items = array();
-		foreach ( $s['items'] as $it ) {
-			if ( 'sub' === ( $it['type'] ?? '' ) || '' === trim( (string) ( $it['name'] ?? '' ) ) ) {
-				continue;
-			}
-			// Preise (Google verlangt mindestens einen)
-			$prices = array();
-			foreach ( (array) ( $it['variants'] ?? array() ) as $v ) {
-				$n = fs_sk_price_number( $v['price'] ?? '' );
-				if ( null !== $n ) {
-					$prices[] = array( 'size' => trim( (string) ( $v['size'] ?? '' ) ), 'num' => $n );
-				}
-			}
-			if ( ! $prices ) {
-				continue;
-			}
-			$attr = array( 'price' => fs_sk_google_money( $prices[0]['num'] ) );
-			if ( 'vegan' === ( $it['veg'] ?? '' ) ) {
-				$attr['dietaryRestriction'] = array( 'VEGAN' );
-			} elseif ( 'vegetarisch' === ( $it['veg'] ?? '' ) ) {
-				$attr['dietaryRestriction'] = array( 'VEGETARIAN' );
-			}
-			$spice = (int) ( $it['spice'] ?? 0 );
-			if ( $spice > 0 ) {
-				$attr['spiciness'] = array( 1 => 'MILD', 2 => 'MEDIUM', 3 => 'HOT' )[ min( 3, $spice ) ];
-			}
-			$mi = array(
-				'labels'     => fs_sk_google_labels( $it['name'], $it['desc'] ?? '', $it['name2'] ?? '', $it['desc2'] ?? '' ),
-				'attributes' => $attr,
-			);
-			// Mehrere Größen → Varianten bei Google
-			if ( count( $prices ) > 1 ) {
-				$mi['options'] = array();
-				foreach ( $prices as $i => $p ) {
-					$label           = '' !== $p['size'] ? $p['size'] : 'Variante ' . ( $i + 1 );
-					$mi['options'][] = array(
-						'labels'     => array( array( 'displayName' => mb_substr( $label, 0, 140 ), 'languageCode' => 'de' ) ),
-						'attributes' => array( 'price' => fs_sk_google_money( $p['num'] ) ),
-					);
-				}
-			} elseif ( '' !== $prices[0]['size'] && isset( $mi['labels'][0] ) ) {
-				// Eine Größe (z. B. 0,5 l) → an die Beschreibung hängen
-				$d = $mi['labels'][0]['description'] ?? '';
-				$mi['labels'][0]['description'] = trim( $prices[0]['size'] . ( '' !== $d ? ' · ' . $d : '' ) );
-			}
-			$items[] = $mi;
-			$count++;
-		}
+		$items  = fs_sk_google_section_items( $s );
+		$count += count( $items );
 		if ( $items ) {
-			$title      = '' !== trim( (string) $s['title'] ) ? $s['title'] : get_the_title( $post );
+			$title      = '' !== trim( (string) $s['title'] ) ? fs_sk_google_split_title( $s['title'] )[0] : get_the_title( $post );
 			$sections[] = array(
 				'labels' => fs_sk_google_labels( $title, '', $s['title2'] ?? '' ),
 				'items'  => $items,
