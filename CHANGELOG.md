@@ -1,5 +1,8 @@
 # Änderungen
 
+## 1.10.0
+Updates kommen jetzt vom Finestyle Kundenpanel (wie bei den anderen Finestyle-Plugins). Vor jeder neuen Version werden weiterhin alle Karten aller Websites automatisch getestet.
+
 ## 1.9.2
 - Sicherung vor Updates: Jede neue Version wird zuerst mit allen Karten aller Kunden-Websites getestet. Ändert sich dabei etwas am Auslesen, wird die Version erst nach Prüfung veröffentlicht
 

@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Finestyle Speisekarten
  * Description:       Speisekarte als PDF hochladen – wird automatisch als sauberes HTML (gut für Google) auf der Seite ausgegeben und die PDF bleibt per Button im Browser abrufbar.
- * Version:           1.9.2
+ * Version:           1.10.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Finestyle Werbeagentur
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FS_SK_VERSION', '1.9.2' );
+define( 'FS_SK_VERSION', '1.10.0' );
 // Version des Auslesens: nur erhöhen, wenn sich parser.js ändert – dann werden alle Karten neu ausgelesen
 define( 'FS_SK_PARSER', '1.7.0' );
 define( 'FS_SK_URL', plugin_dir_url( __FILE__ ) );
